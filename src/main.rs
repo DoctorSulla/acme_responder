@@ -1,6 +1,7 @@
 use acme_lib::create_p384_key;
 use acme_lib::persist::FilePersist;
 use acme_lib::{Directory, DirectoryUrl, Error};
+use std::thread;
 
 use axum::{routing::get, Router};
 
@@ -9,23 +10,28 @@ use axum::{body::Bytes, extract::Path, http::StatusCode, response::Response};
 use http_body_util::Full;
 
 use std::fs;
+use std::fs::File;
+use std::io::prelude::*;
 
 static CHALLENGE_DIR: &str = "./acme/challenges/";
 
 #[tokio::main]
 async fn main() {
+    start_server().await
+}
+
+async fn start_server() {
     let app = Router::new().route(
         "/.well-known/acme-challenge/:token",
         get(challenge_response),
     );
 
-    // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
 
 pub async fn challenge_response(Path(file_name): Path<String>) -> Response<Full<Bytes>> {
-    let file_path = format!("./{}", file_name);
+    let file_path = format!("{}{}", CHALLENGE_DIR, file_name);
     let mime_type = "application/octet-stream";
 
     let mut status_code = StatusCode::OK;
@@ -33,6 +39,7 @@ pub async fn challenge_response(Path(file_name): Path<String>) -> Response<Full<
     match std::path::Path::new(&file_path).exists() {
         true => body = fs::read(&file_path).unwrap(),
         false => {
+            println!("Path not found: {}", file_path);
             body = b"Challenge not present.".to_vec();
             status_code = StatusCode::NOT_FOUND;
         }
@@ -44,7 +51,12 @@ pub async fn challenge_response(Path(file_name): Path<String>) -> Response<Full<
         .unwrap()
 }
 
-fn populate_challenge(proof: String) {}
+fn populate_challenge(proof: String) -> std::io::Result<()> {
+    let path = format!("{}{}", CHALLENGE_DIR, proof);
+    let mut file = File::create(path)?;
+    file.write_all(proof.as_bytes())?;
+    Ok(())
+}
 
 fn request_cert() -> Result<(), Error> {
     // Use DirectoryUrl::LetsEncrypStaging for dev/testing.
