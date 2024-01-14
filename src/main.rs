@@ -17,7 +17,9 @@ static CHALLENGE_DIR: &str = "./acme/challenges/";
 
 #[tokio::main]
 async fn main() {
-    start_server().await
+    populate_challenge("abcdefgh".to_string()).unwrap();
+    tokio::spawn(async move { start_server().await });
+    request_cert().unwrap();
 }
 
 async fn start_server() {
@@ -103,10 +105,12 @@ fn request_cert() -> Result<(), Error> {
 
         // The token is the filename.
         let token = chall.http_token();
-        let path = format!(".well-known/acme-challenge/{}", token);
+        //let path = format!(".well-known/acme-challenge/{}", token);
 
         // The proof is the contents of the file
         let proof = chall.http_proof();
+
+        populate_challenge(proof).expect("Failed to populate challenge");
 
         // Here you must do "something" to place
         // the file/contents in the correct place.
